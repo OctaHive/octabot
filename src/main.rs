@@ -2,12 +2,13 @@ use std::{env, sync::Arc};
 
 use anyhow::Result;
 use futures::FutureExt;
-use octabot_plugins::manager::PluginManager;
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, subscriber};
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+
+use octabot_executor::executor::ExecutorSystem;
 
 mod utils;
 
@@ -65,12 +66,12 @@ async fn main() -> Result<()> {
 
   let shared_pool = Arc::new(pool);
 
-  let pluginManager = PluginManager::new()?;
+  let executor_system = ExecutorSystem::new(shared_pool.clone()).await?;
 
   if let Err(err) = utils::join_all(
     vec![
       octabot_api::run(shared_pool.clone(), cancel_token.clone()).boxed(),
-      // clean::run(shared_pool.clone(), cancel_token.clone()).boxed(),
+      executor_system.run(cancel_token.clone()).boxed(),
     ],
     cancel_token,
   )

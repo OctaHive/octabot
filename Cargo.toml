@@ -41,7 +41,7 @@ tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 octabot-api = { path = "crates/api" }
-octabot-plugins = { path = "crates/plugins" }
+octabot-executor = { path = "crates/executor" }
 
 [workspace]
 resolver = "2"

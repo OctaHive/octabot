@@ -26,7 +26,7 @@ use handlers::{projects::init_projects_routes, tasks::init_tasks_routes, users::
 pub mod entities;
 mod error;
 mod handlers;
-mod service;
+pub mod service;
 mod workers;
 
 const OCTABOT_TAG: &str = "octabot";

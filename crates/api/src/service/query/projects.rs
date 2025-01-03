@@ -14,7 +14,6 @@ const LIST_PROJECTS_QUERY: &str = r#"
     p.name as project_name,
     p.code as project_code,
     p.options as project_options,
-    p.sync_with_exchange as project_sync_with_exchange,
     p.created_at as project_created_at,
     p.updated_at as project_updated_at,
     u.id as user_id,

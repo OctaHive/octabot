@@ -3,9 +3,9 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use exports::octahive::octabot::plugin::Metadata;
+use exports::octahive::octabot::plugin::{Action, Metadata};
 use serde::{Deserialize, Serialize};
 use wasmtime::{component::Component, Store};
 
@@ -20,17 +20,38 @@ wasmtime::component::bindgen!({
   trappable_imports: true,
 });
 
+#[async_trait]
+pub trait PluginActions: Send + 'static {
+  async fn init(&self, store: &mut Store<State>) -> Result<Metadata>;
+
+  async fn process(&self, store: &mut Store<State>, config: &str, params: &str) -> Result<Vec<Action>>;
+}
+
 pub struct InstanceData {
   interface: Octabot,
   pub metadata: Metadata,
 }
 
-pub const PLUGINS_PATH: &str = "./plugins";
-
 #[async_trait]
-pub trait PluginActions: Send + 'static {
-  async fn init(&self, store: &mut Store<State>) -> Result<Metadata>;
+impl PluginActions for InstanceData {
+  async fn init(&self, store: &mut Store<State>) -> Result<Metadata> {
+    self.interface.octahive_octabot_plugin().call_init(store).await
+  }
+
+  async fn process(&self, store: &mut Store<State>, config: &str, params: &str) -> Result<Vec<Action>> {
+    Ok(
+      self
+        .interface
+        .octahive_octabot_plugin()
+        .call_process(store, config, params)
+        .await
+        .unwrap()
+        .unwrap(),
+    )
+  }
 }
+
+pub const PLUGINS_PATH: &str = "./plugins";
 
 pub struct PluginManager {
   engine: Engine,

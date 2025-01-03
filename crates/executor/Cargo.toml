@@ -11,9 +11,18 @@ chrono = { workspace = true }
 chrono-tz = "0.10.0"
 cron = "0.14.0"
 duration-str = "0.12.0"
+futures = "0.3.31"
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
+wasmtime = { version = "28.0.0", features = [
+  "component-model",
+  "cranelift",
+  "std",
+  "runtime",
+] }
 octabot-api = { path = "../api" }
+octabot-plugins = { path = "../plugins" }
