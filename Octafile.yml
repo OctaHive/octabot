@@ -1,0 +1,6 @@
+version: 1
+
+tasks:
+  update-wit-deps:
+    cmd: wit-deps update
+    dir: ./crates/plugin

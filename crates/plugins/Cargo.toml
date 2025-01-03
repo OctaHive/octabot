@@ -1,0 +1,24 @@
+[package]
+name = "octabot-plugins"
+version = "0.1.0"
+authors = ["Old Punk <roman.efremenko@gmail.com>"]
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+base64 = "0.22.1"
+hyper = "1.5.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+wasmtime = { version = "28.0.0", features = [
+  "component-model",
+  "cranelift",
+  "std",
+  "runtime",
+] }
+wasmtime-wasi = "28.0.0"
+wasmtime-wasi-http = "28.0.0"
+wit-bindgen = "0.36.0"
