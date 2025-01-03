@@ -21,12 +21,13 @@ use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
-use handlers::users::init_users_routes;
+use handlers::{projects::init_projects_routes, tasks::init_tasks_routes, users::init_users_routes};
 
-mod entities;
+pub mod entities;
 mod error;
 mod handlers;
 mod service;
+mod workers;
 
 const OCTABOT_TAG: &str = "octabot";
 
@@ -74,8 +75,8 @@ pub async fn run(state: Arc<SqlitePool>, cancel_token: CancellationToken) -> any
   let (router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
     .route("/health", get(health_handler))
     .nest("/api/users", init_users_routes(state.clone()))
-    // .nest("/api/projects", init_projects_routes(state.clone()))
-    // .nest("/api/tasks", init_tasks_routes(state.clone()))
+    .nest("/api/projects", init_projects_routes(state.clone()))
+    .nest("/api/tasks", init_tasks_routes(state.clone()))
     .layer(CookieManagerLayer::new())
     .layer(cors)
     .with_state(state)

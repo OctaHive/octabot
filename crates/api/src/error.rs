@@ -15,6 +15,8 @@ pub enum ApiError {
   UserAlreadyExist(String),
   #[error("Entity `{0}` is not found")]
   ResourceNotFound(String),
+  #[error("Project with code `{0}` already exists")]
+  ProjectAlreadyExist(String),
   #[error("Database error: {0}")]
   DatabaseError(#[from] SqlxError),
   #[error(transparent)]
@@ -97,6 +99,7 @@ impl ApiError {
           StatusCode::INTERNAL_SERVER_ERROR,
         )
       },
+      ProjectAlreadyExist(_) => todo!(),
     };
 
     (status_code, AppResponseError::new(kind, message, code, details))
