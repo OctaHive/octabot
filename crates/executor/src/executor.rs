@@ -54,6 +54,7 @@ impl Config {
 pub struct Plugin {
   pub instance: InstanceData,
   pub store: Arc<Mutex<Store<State>>>,
+  pub options: Option<Value>,
 }
 
 pub struct ExecutorSystem {
@@ -107,6 +108,7 @@ impl ExecutorSystem {
         Plugin {
           instance: plugin,
           store,
+          options: config.options.clone(),
         },
       );
     }
@@ -212,8 +214,13 @@ impl ExecutorSystem {
       .get(&task.r#type)
       .ok_or_else(|| anyhow::anyhow!("Unknown plugin type: {}", task.r#type))?;
     let mut store = plugin.store.lock().await;
+    let options = plugin.options.as_ref().unwrap();
 
-    match plugin.instance.process(&mut store, "", "").await {
+    match plugin
+      .instance
+      .process(&mut store, &options.to_string(), &task.options.to_string())
+      .await
+    {
       Ok(_) => {
         if let Some(_) = &task.schedule {
           let start_at = calculate_next_run(&task).context("Failed to calculate next run time")?;
