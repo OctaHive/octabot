@@ -2,6 +2,7 @@ use std::{env, sync::Arc};
 
 use anyhow::Result;
 use futures::FutureExt;
+use octabot_api::workers::clean;
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
@@ -72,6 +73,7 @@ async fn main() -> Result<()> {
     vec![
       octabot_api::run(shared_pool.clone(), cancel_token.clone()).boxed(),
       executor_system.run(cancel_token.clone()).boxed(),
+      clean::run(shared_pool.clone(), cancel_token.clone()).boxed(),
     ],
     cancel_token,
   )

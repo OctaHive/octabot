@@ -1,9 +1,10 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use octabot_plugins::{
+  bindings::exports::octahive::octabot::plugin::PluginResult,
   manager::{InstanceData, PluginActions, PluginManager},
   state::State,
 };
@@ -35,6 +36,12 @@ pub struct PluginConfig {
   pub name: String,
   pub path: String,
   pub options: Option<Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ExecuteParams {
+  task_id: String,
+  options: Value,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -87,13 +94,14 @@ impl ExecutorSystem {
     let plugin_manager = PluginManager::new()?;
 
     for config in configs {
+      let options = config.options.clone().unwrap_or_default();
       let (instance, store) = plugin_manager.load_plugin(&config.path).await?;
       let store = Arc::new(Mutex::new(store));
 
       let mut store_guard = store.lock().await;
-      let plugin = match instance.init(&mut store_guard).await {
-        Ok(metadata) => {
-          info!("Plugin {} initialized successfully", metadata.name);
+      let plugin = match instance.init(&mut store_guard, &options.to_string()).await {
+        Ok(_) => {
+          info!("Plugin {} initialized successfully", instance.metadata.name);
           instance
         },
         Err(e) => {
@@ -210,17 +218,13 @@ impl ExecutorSystem {
       .await
       .context("Failed to set task status to in_progress")?;
 
-    let plugin = plugins
-      .get(&task.r#type)
-      .ok_or_else(|| anyhow::anyhow!("Unknown plugin type: {}", task.r#type))?;
-    let mut store = plugin.store.lock().await;
-    let options = plugin.options.as_ref().unwrap();
+    let execute_params = ExecuteParams {
+      task_id: task.id.to_string(),
+      options: serde_json::to_value(&task.options).unwrap(),
+    };
 
-    match plugin
-      .instance
-      .process(&mut store, &options.to_string(), &task.options.to_string())
-      .await
-    {
+    // Call process_action instead of directly working with plugin
+    match Self::process_action(plugins, task.r#type.clone(), &execute_params).await {
       Ok(_) => {
         if let Some(_) = &task.schedule {
           let start_at = calculate_next_run(&task).context("Failed to calculate next run time")?;
@@ -233,16 +237,51 @@ impl ExecutorSystem {
             .await
             .context("Failed to mark task as completed")?;
         }
+        Ok(())
       },
       Err(e) => {
         error!("Task execution failed: {}", e);
         mutation::tasks::failed_task(pool, task.id)
           .await
           .context("Failed to mark task as failed")?;
+        Err(e.into())
       },
     }
+  }
 
-    Ok(())
+  fn process_action<'a>(
+    plugins: &'a HashMap<String, Plugin>,
+    action_type: String,
+    action: &'a ExecuteParams,
+  ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + 'a>> {
+    Box::pin(async move {
+      let plugin = plugins
+        .get(&action_type)
+        .ok_or_else(|| anyhow!("Unknown plugin type: {}", &action_type))?;
+
+      let results = {
+        let mut store = plugin.store.lock().await;
+        let action_str = serde_json::to_string(action).context("Failed to serialize action params")?;
+
+        plugin.instance.process(&mut store, &action_str).await?
+      };
+
+      for result in results {
+        match result {
+          PluginResult::Action(action) => {
+            let params: ExecuteParams =
+              serde_json::from_str(&action.payload).context("Failed to deserialize action payload")?;
+            Self::process_action(plugins, action.name, &params).await?;
+          },
+          PluginResult::Task(task) => {
+            println!("{:?}", task);
+            // TODO: add task create
+          },
+        }
+      }
+
+      Ok(())
+    })
   }
 }
 

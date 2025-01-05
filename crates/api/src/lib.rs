@@ -27,7 +27,7 @@ pub mod entities;
 mod error;
 mod handlers;
 pub mod service;
-mod workers;
+pub mod workers;
 
 const OCTABOT_TAG: &str = "octabot";
 

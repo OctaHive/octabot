@@ -23,4 +23,11 @@ Cargo.lock
 # Octa build cache
 .octa
 
+# Bot environments
 .env
+
+# Bot local database
+data
+
+# Bot plugins
+plugins

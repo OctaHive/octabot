@@ -5,26 +5,26 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use exports::octahive::octabot::plugin::{Action, Metadata};
 use serde::{Deserialize, Serialize};
 use wasmtime::{component::Component, Store};
 
 use crate::{
+  bindings::{
+    exports::octahive::octabot::plugin::{Metadata, PluginResult},
+    Octabot,
+  },
   engine::{Config, Engine},
+  error::PluginError,
   state::State,
 };
 
-wasmtime::component::bindgen!({
-  path: "wit/",
-  async: true,
-  trappable_imports: true,
-});
-
 #[async_trait]
 pub trait PluginActions: Send + 'static {
-  async fn init(&self, store: &mut Store<State>) -> Result<Metadata>;
+  async fn load(&self, store: &mut Store<State>) -> Result<Metadata>;
 
-  async fn process(&self, store: &mut Store<State>, config: &str, params: &str) -> Result<Vec<Action>>;
+  async fn init(&self, store: &mut Store<State>, config: &str) -> Result<(), PluginError>;
+
+  async fn process(&self, store: &mut Store<State>, params: &str) -> Result<Vec<PluginResult>, PluginError>;
 }
 
 pub struct InstanceData {
@@ -34,19 +34,29 @@ pub struct InstanceData {
 
 #[async_trait]
 impl PluginActions for InstanceData {
-  async fn init(&self, store: &mut Store<State>) -> Result<Metadata> {
-    self.interface.octahive_octabot_plugin().call_init(store).await
+  async fn load(&self, store: &mut Store<State>) -> Result<Metadata> {
+    self.interface.octahive_octabot_plugin().call_load(store).await
   }
 
-  async fn process(&self, store: &mut Store<State>, config: &str, params: &str) -> Result<Vec<Action>> {
+  async fn init(&self, store: &mut Store<State>, config: &str) -> Result<(), PluginError> {
     Ok(
       self
         .interface
         .octahive_octabot_plugin()
-        .call_process(store, config, params)
+        .call_init(store, config)
         .await
-        .unwrap()
-        .unwrap(),
+        .map_err(|e| PluginError::CallPlugin(e.to_string()))??,
+    )
+  }
+
+  async fn process(&self, store: &mut Store<State>, params: &str) -> Result<Vec<PluginResult>, PluginError> {
+    Ok(
+      self
+        .interface
+        .octahive_octabot_plugin()
+        .call_process(store, params)
+        .await
+        .map_err(|e| PluginError::CallPlugin(e.to_string()))??,
     )
   }
 }
@@ -74,7 +84,7 @@ impl PluginManager {
 
     let interface = Octabot::instantiate_async(&mut store, &component, &self.engine.linker).await?;
 
-    let metadata = interface.octahive_octabot_plugin().call_init(&mut store).await?;
+    let metadata = interface.octahive_octabot_plugin().call_load(&mut store).await?;
 
     Ok((
       InstanceData {

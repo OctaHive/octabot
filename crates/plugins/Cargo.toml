@@ -9,10 +9,17 @@ publish = false
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = "0.22.1"
+lazy_static = "1.5.0"
 hyper = "1.5.2"
+http = "1.2.0"
+http-body-util = "0.1.2"
+rustls = "0.23.20"
 serde = { workspace = true }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
 tokio = { workspace = true }
+tokio-rustls = "0.26.1"
 wasmtime = { version = "28.0.0", features = [
   "component-model",
   "cranelift",
@@ -21,4 +28,6 @@ wasmtime = { version = "28.0.0", features = [
 ] }
 wasmtime-wasi = "28.0.0"
 wasmtime-wasi-http = "28.0.0"
+wasmtime-wasi-keyvalue = "28.0.0"
 wit-bindgen = "0.36.0"
+webpki-roots = "0.26.7"

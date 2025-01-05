@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use wasmtime::{component::Linker, WasmBacktraceDetails};
+use wasmtime_wasi_keyvalue::WasiKeyValue;
 
 use crate::state::State;
 
@@ -34,6 +35,9 @@ impl EngineBuilder {
 
     wasmtime_wasi::add_to_linker_async(&mut linker)?;
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
+    wasmtime_wasi_keyvalue::add_to_linker(&mut linker, |ctx| {
+      WasiKeyValue::new(&ctx.wasi_keyvalue_ctx, &mut ctx.table)
+    })?;
 
     Ok(Self { engine, linker })
   }

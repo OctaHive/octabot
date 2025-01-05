@@ -1,10 +1,42 @@
 package octahive:octabot@0.1.0;
 
 interface plugin {
+  variant plugin-result {
+    action(action-data),
+    task(task-data)
+  }
+
   /// Action
-  record action {
+  record action-data {
     /// The name of the action
-    name: string
+    name: string,
+
+    /// Action payload
+    payload: string
+  }
+
+  /// Task
+  record task-data {
+    /// Task name
+    name: string,
+
+    /// Type of task
+    kind: string,
+
+    /// Project code
+    project-code: string,
+
+    /// External task id
+    external-id: string,
+
+    /// External task modified time
+    external-modified-at: u32,
+
+    /// Start task at
+    start-at: u32,
+
+    /// Task options
+    options: string
   }
 
   /// The metadata for a plugin used for registration and setup
@@ -21,13 +53,36 @@ interface plugin {
 
   /// Errors related to interacting with Plugin
   variant error {
+    /// Parse bot config error
+    parse-bot-config(string),
+
+    /// Parse action payload error
+    parse-action-payload(string),
+
+    /// Send http request error
+    send-http-request(string),
+
+    /// Parse http response error
+    parse-response(string),
+
+    /// Open keyvalue storage error
+    open-storage(string),
+
+    /// Storage operation error
+    storage-operation(string),
+
+    /// Plugin config lock error
+    config-lock(string),
+
     /// Some other error occurred.
     other(string),
   }
 
-  init: func() -> metadata;
+  load: func() -> metadata;
 
-  process: func(config: string, payload: string) -> result<list<action>, error>;
+  init: func(config: string) -> result<_, error>;
+
+  process: func(payload: string) -> result<list<plugin-result>, error>;
 }
 
 world octabot {
@@ -44,6 +99,7 @@ world octabot {
   import wasi:filesystem/types@0.2.3;
   import wasi:filesystem/preopens@0.2.3;
   import wasi:http/outgoing-handler@0.2.3;
+  import wasi:keyvalue/store@0.2.0-draft;
 
   // Exports
   export plugin;
