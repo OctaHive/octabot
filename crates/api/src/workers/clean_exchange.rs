@@ -12,25 +12,25 @@ use crate::service::mutation;
 static QUERY_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub async fn run(pool: Arc<SqlitePool>, cancel_token: CancellationToken) -> Result<()> {
-  debug!("Cleaning database jobs started");
+  info!("Cleaning exchange tasks jobs started");
 
   while !cancel_token.is_cancelled() {
     select! {
       biased;
       _ = cancel_token.cancelled() => {
-        info!("Cleaning database jobs stopped");
+        info!("Cleaning exchange tasks jobs stopped");
         break;
       }
       _ = sleep(QUERY_TIMEOUT) => {
-        let affected_tasks = mutation::tasks::delete_completed_tasks(&pool).await;
+        let affected_tasks = mutation::tasks::delete_by_update_date(&pool).await;
 
         if let Err(e) = affected_tasks {
-          error!("Failed to delete tasks: {}", e);
+          error!("Failed to delete old exchange tasks: {}", e);
 
           continue;
         }
 
-        debug!("Delete {} completed tasks", affected_tasks?);
+        debug!("Delete {} old exchange tasks", affected_tasks?);
       }
     }
   }

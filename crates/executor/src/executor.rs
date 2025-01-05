@@ -1,7 +1,8 @@
+#![allow(deprecated)]
 use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use cron::Schedule;
 use octabot_plugins::{
   bindings::exports::octahive::octabot::plugin::PluginResult,
@@ -24,7 +25,7 @@ use tracing::{debug, error, info, instrument};
 use wasmtime::Store;
 
 use octabot_api::{
-  entities::task::Task,
+  entities::{project::ProjectRow, task::Task},
   service::{mutation, query},
 };
 
@@ -224,7 +225,7 @@ impl ExecutorSystem {
     };
 
     // Call process_action instead of directly working with plugin
-    match Self::process_action(plugins, task.r#type.clone(), &execute_params).await {
+    match Self::process_action(pool, plugins, task.r#type.clone(), &execute_params).await {
       Ok(_) => {
         if let Some(_) = &task.schedule {
           let start_at = calculate_next_run(&task).context("Failed to calculate next run time")?;
@@ -250,6 +251,7 @@ impl ExecutorSystem {
   }
 
   fn process_action<'a>(
+    pool: &'a SqlitePool,
     plugins: &'a HashMap<String, Plugin>,
     action_type: String,
     action: &'a ExecuteParams,
@@ -271,11 +273,33 @@ impl ExecutorSystem {
           PluginResult::Action(action) => {
             let params: ExecuteParams =
               serde_json::from_str(&action.payload).context("Failed to deserialize action payload")?;
-            Self::process_action(plugins, action.name, &params).await?;
+            Self::process_action(pool, plugins, action.name, &params).await?;
           },
           PluginResult::Task(task) => {
-            println!("{:?}", task);
-            // TODO: add task create
+            let projects = query::projects::list_all(&pool).await?;
+            let projects = projects
+              .into_iter()
+              .map(|p| (p.code.clone(), p))
+              .collect::<HashMap<String, ProjectRow>>();
+            let project = projects
+              .get(&task.project_code)
+              .context(format!("Project {} not found", task.project_code))?;
+
+            let naive = NaiveDateTime::from_timestamp(task.external_modified_at as i64, 0);
+            let external_modified_at: DateTime<Utc> = DateTime::<Utc>::from_utc(naive, Utc);
+
+            let task_params = mutation::tasks::CreateTaskParams {
+              name: task.name,
+              r#type: task.kind,
+              schedule: None,
+              project_id: project.id,
+              external_id: Some(task.external_id),
+              external_modified_at: Some(external_modified_at.to_utc()),
+              start_at: task.start_at as i32,
+              options: serde_json::to_value(task.options).context(format!("Failed to parse task options"))?,
+            };
+
+            mutation::tasks::create(&pool, task_params).await?;
           },
         }
       }

@@ -70,7 +70,7 @@ impl ApiError {
         vec![],
         StatusCode::INTERNAL_SERVER_ERROR,
       ),
-      DatabaseError(error) => todo!(),
+      DatabaseError(_) => todo!(),
       UserAlreadyExist(_) => todo!(),
       ResourceNotFound(_) => ("RESOURCE_NOT_FOUND".to_string(), None, vec![], StatusCode::NOT_FOUND),
       InvalidCredentials() => (

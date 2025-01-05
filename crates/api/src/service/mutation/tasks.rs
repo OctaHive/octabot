@@ -133,9 +133,8 @@ pub async fn delete_completed_tasks(pool: &SqlitePool) -> ApiResult<u64> {
   Ok(sqlx::query(DELETE_OLD_TASKS).execute(pool).await?.rows_affected())
 }
 
-pub async fn delete_by_update_date(pool: &SqlitePool) -> ApiResult<()> {
-  sqlx::query(DELETE_STALE_TASKS).execute(pool).await?;
-  Ok(())
+pub async fn delete_by_update_date(pool: &SqlitePool) -> ApiResult<u64> {
+  Ok(sqlx::query(DELETE_STALE_TASKS).execute(pool).await?.rows_affected())
 }
 
 async fn create_task_row(pool: &SqlitePool, params: &CreateTaskParams) -> ApiResult<TaskRow> {
