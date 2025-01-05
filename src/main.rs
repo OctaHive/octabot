@@ -6,8 +6,8 @@ use octabot_api::workers::clean;
 use sqlx::sqlite::SqlitePoolOptions;
 use tokio::signal;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, info, subscriber};
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+use tracing::{error, info};
+use tracing_subscriber::EnvFilter;
 
 use octabot_executor::executor::ExecutorSystem;
 
@@ -17,12 +17,13 @@ mod utils;
 async fn main() -> Result<()> {
   dotenvy::dotenv().ok();
 
-  let log_level = env::var("TEAM_BOT_LOG_LEVEL").expect("TEAM_BOT_LOG_LEVEL is not set in .env file");
+  let log_level = env::var("OCTABOT_LOG_LEVEL").expect("OCTABOT_LOG_LEVEL is not set in .env file");
   let db_url = env::var("DATABASE_URL").expect("DATABASE_URL is not set in .env file");
 
-  let subscriber = tracing_subscriber::registry().with(EnvFilter::from_default_env().add_directive(log_level.parse()?));
+  let env_filter = EnvFilter::from_default_env().add_directive(log_level.parse()?);
 
-  subscriber::set_global_default(subscriber)?;
+  // Initialize tracing subscriber with the environment filter
+  tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
   let cancel_token = CancellationToken::new();
 

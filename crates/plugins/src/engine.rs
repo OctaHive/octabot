@@ -4,7 +4,7 @@ use anyhow::Result;
 use wasmtime::{component::Linker, WasmBacktraceDetails};
 use wasmtime_wasi_keyvalue::WasiKeyValue;
 
-use crate::state::State;
+use crate::{bindings::wasi, state::State};
 
 pub struct Config {
   inner: wasmtime::Config,
@@ -38,6 +38,7 @@ impl EngineBuilder {
     wasmtime_wasi_keyvalue::add_to_linker(&mut linker, |ctx| {
       WasiKeyValue::new(&ctx.wasi_keyvalue_ctx, &mut ctx.table)
     })?;
+    wasi::logging::logging::add_to_linker(&mut linker, |ctx| ctx)?;
 
     Ok(Self { engine, linker })
   }
