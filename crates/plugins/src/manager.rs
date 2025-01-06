@@ -3,28 +3,27 @@ use std::{
   path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use wasmtime::{component::Component, Store};
 
 use crate::{
   bindings::{
-    exports::octahive::octabot::plugin::{Metadata, PluginResult},
+    exports::octahive::octabot::plugin::{Metadata, PluginResult as Result},
     Octabot,
   },
   engine::{Config, Engine},
-  error::PluginError,
+  error::{PluginError, PluginResult},
   state::State,
 };
 
 #[async_trait]
 pub trait PluginActions: Send + 'static {
-  async fn load(&self, store: &mut Store<State>) -> Result<Metadata>;
+  async fn load(&self, store: &mut Store<State>) -> PluginResult<Metadata>;
 
-  async fn init(&self, store: &mut Store<State>, config: &str) -> Result<(), PluginError>;
+  async fn init(&self, store: &mut Store<State>, config: &str) -> PluginResult<()>;
 
-  async fn process(&self, store: &mut Store<State>, params: &str) -> Result<Vec<PluginResult>, PluginError>;
+  async fn process(&self, store: &mut Store<State>, params: &str) -> PluginResult<Vec<Result>>;
 }
 
 pub struct InstanceData {
@@ -34,29 +33,34 @@ pub struct InstanceData {
 
 #[async_trait]
 impl PluginActions for InstanceData {
-  async fn load(&self, store: &mut Store<State>) -> Result<Metadata> {
-    self.interface.octahive_octabot_plugin().call_load(store).await
+  async fn load(&self, store: &mut Store<State>) -> PluginResult<Metadata> {
+    self
+      .interface
+      .octahive_octabot_plugin()
+      .call_load(store)
+      .await
+      .map_err(|e| PluginError::CallPluginError(e.to_string()))
   }
 
-  async fn init(&self, store: &mut Store<State>, config: &str) -> Result<(), PluginError> {
+  async fn init(&self, store: &mut Store<State>, config: &str) -> PluginResult<()> {
     Ok(
       self
         .interface
         .octahive_octabot_plugin()
         .call_init(store, config)
         .await
-        .map_err(|e| PluginError::CallPlugin(e.to_string()))??,
+        .map_err(|e| PluginError::CallPluginError(e.to_string()))??,
     )
   }
 
-  async fn process(&self, store: &mut Store<State>, params: &str) -> Result<Vec<PluginResult>, PluginError> {
+  async fn process(&self, store: &mut Store<State>, params: &str) -> PluginResult<Vec<Result>> {
     Ok(
       self
         .interface
         .octahive_octabot_plugin()
         .call_process(store, params)
         .await
-        .map_err(|e| PluginError::CallPlugin(e.to_string()))??,
+        .map_err(|e| PluginError::CallPluginError(e.to_string()))??,
     )
   }
 }
@@ -68,23 +72,32 @@ pub struct PluginManager {
 }
 
 impl PluginManager {
-  pub fn new() -> Result<Self> {
+  pub fn new() -> PluginResult<Self> {
     let config = Config::default();
 
-    let engine = Engine::builder(&config)?.build();
+    let engine = Engine::builder(&config)
+      .map_err(|e| PluginError::InitWasmEngineError(e.to_string()))?
+      .build();
 
     Ok(Self { engine })
   }
 
-  pub async fn load_plugin(&self, path: impl AsRef<Path>) -> Result<(InstanceData, Store<State>)> {
+  pub async fn load_plugin(&self, path: impl AsRef<Path>) -> PluginResult<(InstanceData, Store<State>)> {
     let path = PathBuf::from(PLUGINS_PATH).join(path);
-    let component = Component::from_file(&self.engine.inner, path)?;
+    let component =
+      Component::from_file(&self.engine.inner, path).map_err(|e| PluginError::ReadComponentError(e.to_string()))?;
 
     let mut store = wasmtime::Store::new(&self.engine.inner, State::default());
 
-    let interface = Octabot::instantiate_async(&mut store, &component, &self.engine.linker).await?;
+    let interface = Octabot::instantiate_async(&mut store, &component, &self.engine.linker)
+      .await
+      .map_err(|e| PluginError::InitComponentError(e.to_string()))?;
 
-    let metadata = interface.octahive_octabot_plugin().call_load(&mut store).await?;
+    let metadata = interface
+      .octahive_octabot_plugin()
+      .call_load(&mut store)
+      .await
+      .map_err(|e| PluginError::CallPluginError(e.to_string()))?;
 
     Ok((
       InstanceData {
@@ -117,11 +130,11 @@ impl Default for PluginLocation {
 }
 
 impl PluginLocation {
-  pub async fn load(&self) -> Result<Vec<u8>> {
+  pub async fn load(&self) -> PluginResult<Vec<u8>> {
     match &self {
       Self::Local(path) => tokio::fs::read(path)
         .await
-        .map_err(|e| anyhow!("reading plugin file: {}", e)),
+        .map_err(|e| PluginError::PluginReadError(e.to_string())),
     }
   }
 }

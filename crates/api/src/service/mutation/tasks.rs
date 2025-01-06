@@ -57,7 +57,7 @@ pub struct CreateTaskParams {
 
 pub async fn create(pool: &SqlitePool, params: CreateTaskParams) -> ApiResult<Task> {
   let existing_task = match &params.external_id {
-    Some(external_id) => get_task_by_external_id(pool, &external_id).await?,
+    Some(external_id) => get_task_by_external_id(pool, external_id).await?,
     None => None,
   };
 
@@ -144,7 +144,7 @@ async fn create_task_row(pool: &SqlitePool, params: &CreateTaskParams) -> ApiRes
     .bind(params.project_id)
     .bind(&params.name)
     .bind(&params.external_id)
-    .bind(&params.external_modified_at)
+    .bind(params.external_modified_at)
     .bind(&params.schedule)
     .bind(params.start_at)
     .bind(&params.options)

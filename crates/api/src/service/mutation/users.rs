@@ -41,7 +41,7 @@ pub struct CreateUserParams {
 
 pub async fn create(pool: &SqlitePool, mut params: CreateUserParams) -> ApiResult<User> {
   // Check if user already exists
-  if let Some(_) = check_user_exists(pool, &params.email).await? {
+  if (check_user_exists(pool, &params.email).await?).is_some() {
     return Err(ApiError::UserAlreadyExist(params.email));
   }
 

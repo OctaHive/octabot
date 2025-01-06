@@ -245,7 +245,7 @@ pub async fn default_send_request_handler(
       authority.to_string()
     } else {
       let port = if use_tls { 443 } else { 80 };
-      format!("{}:{port}", authority.to_string())
+      format!("{}:{port}", authority)
     }
   } else {
     return Err(ErrorCode::HttpRequestUriInvalid);

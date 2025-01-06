@@ -29,6 +29,8 @@ use octabot_api::{
   service::{mutation, query},
 };
 
+use crate::error::{ExecutorError, ExecutorResult};
+
 const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
 const CHANNEL_CAPACITY: usize = 500;
 
@@ -52,10 +54,10 @@ struct Config {
 }
 
 impl Config {
-  fn from_file(path: &str) -> Result<Self> {
-    let file = std::fs::File::open(path).with_context(|| format!("Failed to open config file: {}", path))?;
+  fn from_file(path: &str) -> ExecutorResult<Self> {
+    let file = std::fs::File::open(path).map_err(ExecutorError::ConfigOpenError)?;
 
-    serde_json::from_reader(file).with_context(|| "Failed to parse config file")
+    serde_json::from_reader(file).map_err(|e| ExecutorError::ConfigReadError(e.to_string()))
   }
 }
 
@@ -75,7 +77,7 @@ pub struct ExecutorSystem {
 
 impl ExecutorSystem {
   #[instrument(level = "debug", skip(pool))]
-  pub async fn new(pool: Arc<SqlitePool>) -> Result<Self> {
+  pub async fn new(pool: Arc<SqlitePool>) -> ExecutorResult<Self> {
     let (tx, rx) = channel::<Task>(CHANNEL_CAPACITY);
 
     let config = Config::from_file("config.json")?;
@@ -90,7 +92,7 @@ impl ExecutorSystem {
     })
   }
 
-  async fn initialize_plugins(configs: &[PluginConfig]) -> Result<HashMap<String, Plugin>> {
+  async fn initialize_plugins(configs: &[PluginConfig]) -> ExecutorResult<HashMap<String, Plugin>> {
     let mut plugins = HashMap::new();
     let plugin_manager = PluginManager::new()?;
 
@@ -227,7 +229,7 @@ impl ExecutorSystem {
     // Call process_action instead of directly working with plugin
     match Self::process_action(pool, plugins, task.r#type.clone(), &execute_params).await {
       Ok(_) => {
-        if let Some(_) = &task.schedule {
+        if task.schedule.is_some() {
           let start_at = calculate_next_run(&task).context("Failed to calculate next run time")?;
 
           mutation::tasks::schedule_task(pool, task.id, start_at)
@@ -245,7 +247,7 @@ impl ExecutorSystem {
         mutation::tasks::failed_task(pool, task.id)
           .await
           .context("Failed to mark task as failed")?;
-        Err(e.into())
+        Err(e)
       },
     }
   }
@@ -259,7 +261,7 @@ impl ExecutorSystem {
     Box::pin(async move {
       let plugin = plugins
         .get(&action_type)
-        .ok_or_else(|| anyhow!("Unknown plugin type: {}", &action_type))?;
+        .ok_or_else(|| ExecutorError::UnknownPluginError(action_type))?;
 
       let results = {
         let mut store = plugin.store.lock().await;
@@ -276,7 +278,7 @@ impl ExecutorSystem {
             Self::process_action(pool, plugins, action.name, &params).await?;
           },
           PluginResult::Task(task) => {
-            let projects = query::projects::list_all(&pool).await?;
+            let projects = query::projects::list_all(pool).await?;
             let projects = projects
               .into_iter()
               .map(|p| (p.code.clone(), p))
@@ -296,10 +298,10 @@ impl ExecutorSystem {
               external_id: Some(task.external_id),
               external_modified_at: Some(external_modified_at.to_utc()),
               start_at: task.start_at as i32,
-              options: serde_json::to_value(task.options).context(format!("Failed to parse task options"))?,
+              options: serde_json::to_value(task.options).context("Failed to parse task options")?,
             };
 
-            mutation::tasks::create(&pool, task_params).await?;
+            mutation::tasks::create(pool, task_params).await?;
           },
         }
       }
@@ -312,7 +314,7 @@ impl ExecutorSystem {
 #[instrument(level = "debug")]
 fn calculate_next_run(task: &Task) -> Result<i32> {
   let start_at =
-    DateTime::from_timestamp(task.start_at as i64, 0).ok_or_else(|| anyhow::anyhow!("Invalid timestamp"))?;
+    DateTime::from_timestamp(task.start_at as i64, 0).ok_or_else(|| ExecutorError::InvalidTimestampError)?;
 
   let next_run = if let Some(schedule) = &task.schedule {
     if schedule.starts_with("@every") {
@@ -331,13 +333,13 @@ fn calculate_interval_next_run(schedule: &str, start_at: DateTime<Utc>) -> Resul
   // Extract interval duration from schedule string
   let duration_str = schedule
     .strip_prefix("@every ")
-    .ok_or_else(|| anyhow!("Invalid schedule format: must start with '@every'"))?;
+    .ok_or_else(|| ExecutorError::InvalidScheduleFormat)?;
 
   // Parse duration string into std::time::Duration
-  let std_duration = duration_str::parse(duration_str).map_err(|e| anyhow!("Failed to parse duration: {}", e))?;
+  let std_duration = duration_str::parse(duration_str).map_err(|e| ExecutorError::DurationParseError(e.to_string()))?;
 
   // Convert to chrono::Duration
-  let interval = chrono::Duration::from_std(std_duration).context("Failed to convert to chrono duration")?;
+  let interval = chrono::Duration::from_std(std_duration).map_err(|_| ExecutorError::DurationConvertError)?;
 
   // Calculate timestamps
   let current_time = Utc::now().timestamp();
@@ -360,12 +362,12 @@ fn calculate_interval_next_run(schedule: &str, start_at: DateTime<Utc>) -> Resul
 }
 
 fn calculate_cron_next_run(schedule: &str, start_at: DateTime<Utc>) -> Result<i32> {
-  let schedule = Schedule::from_str(schedule).context("Failed to parse cron schedule")?;
+  let schedule = Schedule::from_str(schedule).map_err(|e| ExecutorError::ParseCronError(e.to_string()))?;
 
   let next_run = schedule
     .after(&start_at)
     .next()
-    .ok_or_else(|| anyhow::anyhow!("Failed to calculate next cron run"))?;
+    .ok_or_else(|| ExecutorError::CalculateCronScheduleError)?;
 
   Ok(next_run.timestamp() as i32)
 }
