@@ -8,11 +8,11 @@ edition = "2021"
 
 [workspace.dependencies]
 anyhow = "1.0.95"
-async-trait = "0.1.84"
+async-trait = "0.1.85"
 chrono = { version = "0.4.39", features = ["serde"] }
 dotenvy = "0.15.7"
 openssl-sys = { version = "0.9", features = ["vendored"] }
-sqlx = { version = "0.8.2", features = [
+sqlx = { version = "0.8.3", features = [
   "sqlite",
   "runtime-tokio",
   "tls-native-tls",
@@ -20,16 +20,16 @@ sqlx = { version = "0.8.2", features = [
   "uuid",
 ] }
 serde = { version = "1.0.217", features = ["derive"] }
-serde_json = "1.0.134"
-thiserror = "2.0.9"
-tokio = { version = "1.42.0", features = ["full"] }
+serde_json = "1.0.137"
+thiserror = "2.0.11"
+tokio = { version = "1.43.0", features = ["full"] }
 tokio-util = "0.7.13"
 tracing = { version = "0.1.41", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.19", features = [
   "registry",
   "env-filter",
 ] }
-uuid = { version = "1.11.0", features = ["serde", "v4"] }
+uuid = { version = "1.12.1", features = ["serde", "v4"] }
 
 [dependencies]
 anyhow = { workspace = true }

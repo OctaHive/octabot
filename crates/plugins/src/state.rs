@@ -1,6 +1,5 @@
 use std::{collections::HashMap, sync::Arc};
 
-use async_trait::async_trait;
 use http_body_util::BodyExt;
 use hyper::{
   client::conn::http1::SendRequest,
@@ -277,7 +276,6 @@ pub async fn default_send_request_handler(
   })
 }
 
-#[async_trait]
 impl wasi::logging::logging::Host for State {
   async fn log(
     &mut self,
