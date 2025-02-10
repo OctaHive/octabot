@@ -30,4 +30,4 @@ target/
 data
 
 # Bot plugins
-plugins
+plugins/*.wasm
