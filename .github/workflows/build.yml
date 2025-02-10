@@ -52,7 +52,7 @@ jobs:
       - name: Build binary (*nix)
         shell: bash
         run: |
-          ${{ matrix.platform.cargo_command }} build --release --target ${{ matrix.platform.target }}
+          ${{ matrix.platform.cargo_command }} build --locked --release --target ${{ matrix.platform.target }}
         if: ${{ !contains(matrix.platform.os, 'windows') }}
 
       - name: Build binary (Windows)
