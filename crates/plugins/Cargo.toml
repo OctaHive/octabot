@@ -10,10 +10,10 @@ anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = "0.22.1"
 lazy_static = "1.5.0"
-hyper = "1.5.2"
+hyper = "1.6.0"
 http = "1.2.0"
 http-body-util = "0.1.2"
-rustls = "0.23.21"
+rustls = "0.23.22"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
@@ -29,5 +29,5 @@ wasmtime = { version = "29.0.1", features = [
 wasmtime-wasi = "29.0.1"
 wasmtime-wasi-http = "29.0.1"
 wasmtime-wasi-keyvalue = "29.0.1"
-wit-bindgen = "0.38.0"
-webpki-roots = "0.26.7"
+wit-bindgen = "0.39.0"
+webpki-roots = "0.26.8"
