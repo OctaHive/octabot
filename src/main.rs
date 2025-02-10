@@ -15,6 +15,10 @@ mod utils;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+  rustls::crypto::ring::default_provider()
+    .install_default()
+    .expect("Failed to install default rustls crypto provider");
+
   dotenvy::dotenv().ok();
 
   let log_level = env::var("OCTABOT_LOG_LEVEL").expect("OCTABOT_LOG_LEVEL is not set in .env file");

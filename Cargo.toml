@@ -33,6 +33,10 @@ uuid = { version = "1.13.1", features = ["serde", "v4"] }
 anyhow = { workspace = true }
 dotenvy = { workspace = true }
 futures = "0.3.31"
+rustls = { version = "0.23.22", features = ["ring"] }
+tokio-tungstenite = { version = "0.26.1", features = [
+  "rustls-tls-webpki-roots",
+] }
 sqlx = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
