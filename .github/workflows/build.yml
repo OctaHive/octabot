@@ -49,9 +49,10 @@ jobs:
         with:
           targets: ${{ matrix.platform.target }}
 
-      - name: Install musl target
+      - name: Install musl-gcc
         run: |
-          rustup target add x86_64-unknown-linux-musl
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
 
       - name: Build binary (*nix)
         shell: bash
