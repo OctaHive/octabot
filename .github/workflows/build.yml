@@ -50,6 +50,7 @@ jobs:
           targets: ${{ matrix.platform.target }}
 
       - name: Install musl-gcc
+        if: contains(matrix.platform.os, 'linux')
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools
