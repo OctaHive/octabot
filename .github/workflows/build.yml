@@ -21,7 +21,7 @@ jobs:
         platform:
           - os_name: Linux-amd64
             os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
+            target: x86_64-unknown-linux-musl
             bin: octabot
             name: octabot-Linux-amd64.tar.gz
             cargo_command: cargo
