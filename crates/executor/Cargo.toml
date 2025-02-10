@@ -3,7 +3,6 @@ name = "octabot-executor"
 version = "0.1.0"
 authors = ["Old Punk <roman.efremenko@gmail.com>"]
 edition = "2021"
-publish = false
 
 [dependencies]
 anyhow = { workspace = true }

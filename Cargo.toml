@@ -2,7 +2,6 @@
 name = "octabot"
 version = "0.1.0"
 authors = ["Roman Efremenko <roman.efremenko@gmail.com>"]
-publish = false
 license = "MIT"
 edition = "2021"
 
