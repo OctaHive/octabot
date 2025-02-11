@@ -1,15 +1,20 @@
+use std::time::Instant;
 use std::{collections::HashMap, sync::Arc};
 
+use bytes::Bytes;
+use http_body_util::combinators::BoxBody;
 use http_body_util::BodyExt;
+use http_body_util::Empty;
 use hyper::{
   client::conn::http1::SendRequest,
   header::{self, HeaderValue},
 };
 use lazy_static::lazy_static;
+use std::convert::Infallible;
 use std::time::Duration;
-use tokio::net::TcpStream;
 use tokio::sync::{Mutex, Semaphore};
 use tokio::time::timeout;
+use tokio::{net::TcpStream, time::sleep};
 use wasmtime::component::ResourceTable;
 use wasmtime_wasi::{runtime::AbortOnDropJoinHandle, WasiCtx, WasiCtxBuilder, WasiView};
 use wasmtime_wasi_http::{
@@ -20,9 +25,11 @@ use wasmtime_wasi_http::{
   types::{HostFutureIncomingResponse, IncomingResponse, OutgoingRequestConfig},
   WasiHttpCtx, WasiHttpView,
 };
-use wasmtime_wasi_keyvalue::{WasiKeyValueCtx, WasiKeyValueCtxBuilder};
 
-use crate::bindings::wasi;
+use crate::{
+  bindings::wasi,
+  keyvalue::{WasiKeyValueCtx, WasiKeyValueCtxBuilder},
+};
 
 lazy_static! {
   static ref HTTP_POOL: Arc<HttpConnectionPool> = Arc::new(HttpConnectionPool::new(50));
@@ -36,7 +43,8 @@ struct HttpConnectionPool {
 
 struct PooledConnection {
   sender: SendRequest<HyperOutgoingBody>,
-  last_used: std::time::Instant,
+  last_used: Instant,
+  created_at: Instant,
 }
 
 pub(crate) fn dns_error(rcode: String, info_code: u16) -> ErrorCode {
@@ -47,6 +55,9 @@ pub(crate) fn dns_error(rcode: String, info_code: u16) -> ErrorCode {
 }
 
 impl HttpConnectionPool {
+  const MAX_RETRIES: u32 = 2;
+  const MAX_CONNECTION_AGE: Duration = Duration::from_secs(300); // 5 minutes
+
   pub fn new(max_connections: usize) -> Self {
     Self {
       connections: Arc::new(Mutex::new(HashMap::new())),
@@ -66,8 +77,11 @@ impl HttpConnectionPool {
     let mut connections = self.connections.lock().await;
     if let Some(connection_list) = connections.get_mut(authority) {
       while let Some(conn) = connection_list.pop() {
-        // Check if connection is not too old (e.g., 60 seconds)
-        if conn.last_used.elapsed() < Duration::from_secs(60) {
+        // Check both idle timeout and total age
+        if conn.last_used.elapsed() < Duration::from_secs(60)
+          && conn.created_at.elapsed() < Self::MAX_CONNECTION_AGE
+          && conn.sender.is_ready()
+        {
           return Ok((conn.sender, None));
         }
         // If connection is too old, let it drop and create a new one
@@ -151,7 +165,8 @@ impl HttpConnectionPool {
   async fn return_connection(&self, authority: String, sender: SendRequest<HyperOutgoingBody>) {
     let conn = PooledConnection {
       sender,
-      last_used: std::time::Instant::now(),
+      last_used: Instant::now(),
+      created_at: Instant::now(),
     };
 
     let mut connections = self.connections.lock().await;
@@ -176,7 +191,7 @@ impl State {
       table: ResourceTable::new(),
       ctx: builder.build(),
       http: WasiHttpCtx::new(),
-      wasi_keyvalue_ctx: WasiKeyValueCtxBuilder::new().build(),
+      wasi_keyvalue_ctx: WasiKeyValueCtxBuilder::new().ttl(Duration::from_secs(86400)).build(),
     }
   }
 }
@@ -231,40 +246,60 @@ pub fn default_send_request(
 }
 
 pub async fn default_send_request_handler(
-  mut request: hyper::Request<HyperOutgoingBody>,
-  OutgoingRequestConfig {
-    use_tls,
-    connect_timeout,
-    first_byte_timeout,
-    between_bytes_timeout,
-  }: OutgoingRequestConfig,
+  request: hyper::Request<HyperOutgoingBody>,
+  config: OutgoingRequestConfig,
 ) -> Result<IncomingResponse, ErrorCode> {
   let authority = if let Some(authority) = request.uri().authority() {
     if authority.port().is_some() {
       authority.to_string()
     } else {
-      let port = if use_tls { 443 } else { 80 };
+      let port = if config.use_tls { 443 } else { 80 };
       format!("{}:{port}", authority)
     }
   } else {
     return Err(ErrorCode::HttpRequestUriInvalid);
   };
 
-  // We need use connection pool because ntlm auth need same connection on handshake process
-  let (mut sender, worker) = HTTP_POOL.get_connection(&authority, use_tls, connect_timeout).await?;
+  let mut retries = 0;
 
-  *request.uri_mut() = http::Uri::builder()
-    .path_and_query(request.uri().path_and_query().map(|p| p.as_str()).unwrap_or("/"))
-    .build()
-    .expect("comes from valid request");
+  // Try to send the original request first
+  match send_request(&authority, request, &config).await {
+    Ok(response) => Ok(response),
+    Err(mut error) => {
+      retries += 1;
 
-  let resp = timeout(first_byte_timeout, sender.send_request(request))
+      while retries < HttpConnectionPool::MAX_RETRIES {
+        sleep(Duration::from_millis(100 * 2u64.pow(retries))).await;
+
+        match send_empty_request(&authority, &config).await {
+          Ok(response) => return Ok(response),
+          Err(e) => {
+            error = e;
+            retries += 1;
+          },
+        }
+      }
+
+      Err(error)
+    },
+  }
+}
+
+async fn send_request(
+  authority: &str,
+  request: hyper::Request<HyperOutgoingBody>,
+  config: &OutgoingRequestConfig,
+) -> Result<IncomingResponse, ErrorCode> {
+  let (mut sender, worker) = HTTP_POOL
+    .get_connection(authority, config.use_tls, config.connect_timeout)
+    .await?;
+
+  let resp = timeout(config.first_byte_timeout, sender.send_request(request))
     .await
     .map_err(|_| ErrorCode::ConnectionReadTimeout)?
     .map_err(hyper_request_error)?
     .map(|body| body.map_err(hyper_request_error).boxed());
 
-  // Return connection to pool if it's still usable
   if sender.is_ready() {
     HTTP_POOL.return_connection(authority.to_string(), sender).await;
   }
@@ -272,7 +307,39 @@ pub async fn default_send_request_handler(
   Ok(IncomingResponse {
     resp,
     worker,
-    between_bytes_timeout,
+    between_bytes_timeout: config.between_bytes_timeout,
+  })
+}
+
+async fn send_empty_request(authority: &str, config: &OutgoingRequestConfig) -> Result<IncomingResponse, ErrorCode> {
+  let (mut sender, worker) = HTTP_POOL
+    .get_connection(authority, config.use_tls, config.connect_timeout)
+    .await?;
+
+  let empty_body: Empty<Bytes> = Empty::new();
+  let mapped_body = empty_body.map_err(|never: Infallible| -> ErrorCode { match never {} });
+  let boxed_body = BoxBody::new(mapped_body);
+
+  let request = hyper::Request::builder()
+    .method(http::Method::GET)
+    .uri("/")
+    .body(boxed_body)
+    .map_err(|_| ErrorCode::HttpProtocolError)?;
+
+  let resp = timeout(config.first_byte_timeout, sender.send_request(request))
+    .await
+    .map_err(|_| ErrorCode::ConnectionReadTimeout)?
+    .map_err(hyper_request_error)?
+    .map(|body| body.map_err(hyper_request_error).boxed());
+
+  if sender.is_ready() {
+    HTTP_POOL.return_connection(authority.to_string(), sender).await;
+  }
+
+  Ok(IncomingResponse {
+    resp,
+    worker,
+    between_bytes_timeout: config.between_bytes_timeout,
   })
 }
 
