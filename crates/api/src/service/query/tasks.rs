@@ -54,7 +54,8 @@ const RUNNABLE_TASKS_QUERY: &str = r#"
     t.updated_at as task_updated_at
   FROM tasks AS t
   LEFT OUTER JOIN projects AS p ON t.project_id = p.id
-  WHERE status NOT IN ('finished', 'in_progress', 'failed')
+  WHERE status NOT IN ('finished', 'in_progress')
+  AND t.retries < 3
   AND start_at <= unixepoch()
   ORDER BY t.id
 "#;
