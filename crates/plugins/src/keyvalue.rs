@@ -18,7 +18,7 @@ use anyhow::Result;
 use parking_lot::Mutex;
 use std::time::{Duration, Instant};
 use std::{collections::HashMap, sync::Arc};
-use wasmtime::component::{Resource, ResourceTable, ResourceTableError};
+use wasmtime::component::{HasData, Resource, ResourceTable, ResourceTableError};
 
 struct CacheEntry {
   value: Vec<u8>,
@@ -230,10 +230,16 @@ impl keyvalue::store::HostBucket for WasiKeyValue<'_> {
 }
 
 /// Add all the `wasi-keyvalue` world's interfaces to a [`wasmtime::component::Linker`].
-pub fn add_to_linker<T: Send>(
+pub fn add_to_linker<T: Send + 'static>(
   l: &mut wasmtime::component::Linker<T>,
-  f: impl Fn(&mut T) -> WasiKeyValue<'_> + Send + Sync + Copy + 'static,
+  f: fn(&mut T) -> WasiKeyValue<'_>,
 ) -> Result<()> {
-  keyvalue::store::add_to_linker_get_host(l, f)?;
+  keyvalue::store::add_to_linker::<_, HasWasiKeyValue>(l, f)?;
   Ok(())
+}
+
+struct HasWasiKeyValue;
+
+impl HasData for HasWasiKeyValue {
+  type Data<'a> = WasiKeyValue<'a>;
 }

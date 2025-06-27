@@ -16,7 +16,10 @@ use tokio::sync::{Mutex, Semaphore};
 use tokio::time::timeout;
 use tokio::{net::TcpStream, time::sleep};
 use wasmtime::component::ResourceTable;
-use wasmtime_wasi::{runtime::AbortOnDropJoinHandle, WasiCtx, WasiCtxBuilder, WasiView};
+use wasmtime_wasi::{
+  p2::{IoView, WasiCtx, WasiCtxBuilder, WasiView},
+  runtime::AbortOnDropJoinHandle,
+};
 use wasmtime_wasi_http::{
   bindings::http::types::ErrorCode,
   body::HyperOutgoingBody,
@@ -105,11 +108,49 @@ impl HttpConnectionPool {
     if use_tls {
       #[cfg(not(any(target_arch = "riscv64", target_arch = "s390x")))]
       {
-        use rustls::pki_types::ServerName;
+        use rustls::{pki_types::ServerName, RootCertStore};
 
-        let root_cert_store = rustls::RootCertStore {
-          roots: webpki_roots::TLS_SERVER_ROOTS.into(),
-        };
+        let mut root_cert_store = RootCertStore::empty();
+
+        // Читаем сертификаты из директории certs
+        tracing::info!("Loading custom certificates from certs directory");
+        if let Ok(entries) = std::fs::read_dir("certs") {
+          for entry in entries {
+            if let Ok(entry) = entry {
+              let path = entry.path();
+              if path.is_file() {
+                tracing::debug!("Reading certificate file: {:?}", path);
+                if let Ok(cert_data) = std::fs::read(&path) {
+                  // Пытаемся распарсить как PEM
+                  let mut cert_slice = cert_data.as_slice();
+                  let pem_certs = rustls_pemfile::certs(&mut cert_slice);
+                  let mut found_pem = false;
+                  for cert_result in pem_certs {
+                    if let Ok(cert) = cert_result {
+                      let _ = root_cert_store.add(cert);
+                      found_pem = true;
+                      tracing::debug!("Successfully loaded PEM certificate from {:?}", path);
+                    }
+                  }
+                  if !found_pem {
+                    // Пытаемся добавить как DER
+                    let cert = rustls::pki_types::CertificateDer::from(cert_data);
+                    let _ = root_cert_store.add(cert);
+                    tracing::debug!("Successfully loaded DER certificate from {:?}", path);
+                  }
+                } else {
+                  tracing::warn!("Failed to read certificate file: {:?}", path);
+                }
+              }
+            }
+          }
+        } else {
+          tracing::debug!("No certs directory found or unable to read it");
+        }
+
+        // Добавляем стандартные корневые сертификаты
+        root_cert_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+        tracing::info!("Loaded {} root certificates total", root_cert_store.len());
         let config = rustls::ClientConfig::builder()
           .with_root_certificates(root_cert_store)
           .with_no_client_auth();
@@ -202,11 +243,13 @@ impl Default for State {
   }
 }
 
-impl WasiView for State {
+impl IoView for State {
   fn table(&mut self) -> &mut ResourceTable {
     &mut self.table
   }
+}
 
+impl WasiView for State {
   fn ctx(&mut self) -> &mut WasiCtx {
     &mut self.ctx
   }
@@ -215,10 +258,6 @@ impl WasiView for State {
 impl WasiHttpView for State {
   fn ctx(&mut self) -> &mut WasiHttpCtx {
     &mut self.http
-  }
-
-  fn table(&mut self) -> &mut ResourceTable {
-    &mut self.table
   }
 
   fn send_request(

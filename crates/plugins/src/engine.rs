@@ -1,7 +1,10 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use wasmtime::{component::Linker, WasmBacktraceDetails};
+use wasmtime::{
+  component::{HasSelf, Linker},
+  WasmBacktraceDetails,
+};
 
 use crate::{bindings::wasi, keyvalue, state::State};
 
@@ -32,12 +35,12 @@ impl EngineBuilder {
     let engine = wasmtime::Engine::new(&config.inner)?;
     let mut linker: Linker<State> = Linker::new(&engine);
 
-    wasmtime_wasi::add_to_linker_async(&mut linker)?;
+    wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi_http::add_only_http_to_linker_async(&mut linker)?;
     keyvalue::add_to_linker(&mut linker, |ctx| {
       keyvalue::WasiKeyValue::new(&ctx.wasi_keyvalue_ctx, &mut ctx.table)
     })?;
-    wasi::logging::logging::add_to_linker(&mut linker, |ctx| ctx)?;
+    wasi::logging::logging::add_to_linker::<State, HasSelf<State>>(&mut linker, |ctx| ctx)?;
 
     Ok(Self { engine, linker })
   }
