@@ -155,7 +155,7 @@ impl ExecutorSystem {
           _ = sleep(QUERY_TIMEOUT) => {
             debug!("Start polling task from db...");
 
-            match query::tasks::get_tasks_to_run(&pool).await {
+            match mutation::tasks::get_tasks_to_run(&pool).await {
               Ok(tasks) => {
                 debug!("Found {} tasks to run", tasks.len());
                 for task in tasks {
@@ -217,13 +217,9 @@ impl ExecutorSystem {
 
   #[instrument(level = "debug", skip(pool, plugins))]
   async fn process_task(pool: &SqlitePool, plugins: &HashMap<String, Plugin>, task: Task) -> Result<()> {
-    mutation::tasks::run_task(pool, task.id)
-      .await
-      .context("Failed to set task status to in_progress")?;
-
     let execute_params = ExecuteParams {
       task_id: task.id.to_string(),
-      options: serde_json::to_value(&task.options).unwrap(),
+      options: serde_json::to_value(&task.options)?,
     };
 
     // Call process_action instead of directly working with plugin

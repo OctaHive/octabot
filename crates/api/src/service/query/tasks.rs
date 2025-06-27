@@ -31,35 +31,6 @@ const LIST_TASKS_QUERY: &str = r#"
   ORDER BY t.id LIMIT ? OFFSET ?
 "#;
 
-const RUNNABLE_TASKS_QUERY: &str = r#"
-  SELECT
-    p.id as project_id,
-    p.name as project_name,
-    p.code as project_code,
-    p.options as project_options,
-    p.owner_id as project_owner_id,
-    p.created_at as project_created_at,
-    p.updated_at as project_updated_at,
-    t.id as task_id,
-    t.type as task_type,
-    t.status as task_status,
-    t.options as task_options,
-    t.start_at as task_start_at,
-    t.schedule as task_schedule,
-    t.name as task_name,
-    t.retries as task_retries,
-    t.external_id as task_external_id,
-    t.external_modified_at as task_external_modified_at,
-    t.created_at as task_created_at,
-    t.updated_at as task_updated_at
-  FROM tasks AS t
-  LEFT OUTER JOIN projects AS p ON t.project_id = p.id
-  WHERE status NOT IN ('finished', 'in_progress')
-  AND t.retries < 3
-  AND start_at <= unixepoch()
-  ORDER BY t.id
-"#;
-
 /// Fetches a paginated list of tasks with their associated projects
 ///
 /// # Arguments
@@ -74,21 +45,6 @@ pub async fn list(pool: &SqlitePool, page: i64, limit: i64) -> ApiResult<(Vec<Ta
 
   let total_pages = calculate_total_pages(total_count, limit);
   Ok((tasks, total_pages))
-}
-
-/// Fetches a list of tasks that ready to run
-///
-/// # Arguments
-/// * `pool` - The database connection pool
-///
-/// # Returns
-/// A list containing the tasks to run
-pub async fn get_tasks_to_run(pool: &SqlitePool) -> ApiResult<Vec<Task>> {
-  sqlx::query(RUNNABLE_TASKS_QUERY)
-    .map(map_task)
-    .fetch_all(pool)
-    .await
-    .map_err(Into::into)
 }
 
 async fn fetch_paginated_tasks(pool: &SqlitePool, page: i64, limit: i64) -> ApiResult<Vec<Task>> {
