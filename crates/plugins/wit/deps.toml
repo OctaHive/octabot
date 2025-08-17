@@ -1,7 +1,8 @@
 cli = "https://github.com/WebAssembly/wasi-cli/archive/main.tar.gz"
 random = "https://github.com/WebAssembly/wasi-random/archive/main.tar.gz"
 logging = "https://github.com/WebAssembly/wasi-logging/archive/main.tar.gz"
-clocks = "https://github.com/WebAssembly/wasi-clocks/archive/main.tar.gz"
+clocks = "https://github.com/WebAssembly/wasi-clocks/archive/v0.2.7.tar.gz" # Need a set version because in main fect 0.2.5
 filesystem = "https://github.com/WebAssembly/wasi-filesystem/archive/main.tar.gz"
 http = "https://github.com/WebAssembly/wasi-http/archive/main.tar.gz"
 keyvalue = "https://github.com/WebAssembly/wasi-keyvalue/archive/v0.2.0-draft.tar.gz"
+io = "https://github.com/WebAssembly/wasi-io/archive/main.tar.gz"

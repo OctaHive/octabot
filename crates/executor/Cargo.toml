@@ -1,6 +1,6 @@
 [package]
 name = "octabot-executor"
-version = "0.1.0"
+version = "0.0.4"
 authors = ["Old Punk <roman.efremenko@gmail.com>"]
 edition = "2021"
 
@@ -10,7 +10,7 @@ chrono = { workspace = true }
 chrono-tz = "0.10.3"
 cron = "0.15.0"
 duration-str = "0.17.0"
-futures = "0.3.31"
+futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { workspace = true }
@@ -18,11 +18,6 @@ tracing = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-util = { workspace = true }
-wasmtime = { version = "34.0.1", features = [
-  "component-model",
-  "cranelift",
-  "std",
-  "runtime",
-] }
+wasmtime = { workspace = true }
 octabot-api = { path = "../api" }
 octabot-plugins = { path = "../plugins" }
